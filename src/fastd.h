@@ -239,6 +239,10 @@ struct fastd_config {
 	char *status_socket;			/**< The path of the status socket */
 #endif
 
+#ifdef __ANDROID__
+	bool android_tun;			/**< TUN fd to be passed from Android UI */
+#endif
+
 	bool daemon;				/**< Set to make fastd fork to the background after initialization */
 	char *pid_file;				/**< A filename to write fastd's PID to */
 
@@ -336,6 +340,11 @@ bool fastd_socket_handle_binds(void);
 fastd_socket_t * fastd_socket_open(fastd_peer_t *peer, int af);
 void fastd_socket_close(fastd_socket_t *sock);
 void fastd_socket_error(fastd_socket_t *sock);
+
+#ifdef __ANDROID__
+int receive_android_tunfd(void);
+bool fastd_socket_android_protect(fastd_socket_t *sock);
+#endif
 
 void fastd_resolve_peer(fastd_peer_t *peer, fastd_remote_t *remote);
 

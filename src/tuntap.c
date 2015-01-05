@@ -35,7 +35,6 @@
 #include <net/if.h>
 #include <sys/ioctl.h>
 
-
 #ifdef __linux__
 
 #include <linux/if_tun.h>
@@ -60,14 +59,35 @@ static const bool multiaf_tun = false;
 static const bool multiaf_tun = true;
 #endif
 
-
-#if defined(__linux__)
+#if defined(__ANDROID__)
 
 /** Opens the TUN/TAP device */
 void fastd_tuntap_open(void) {
-	struct ifreq ifr = {};
+	pr_debug("initializing tun device...");
 
+	if (conf.mode != MODE_TUN) {
+		exit_error("Android supports only TUN mode");
+	}
+	if (conf.android_tun) {
+		pr_debug("using android TUN fd");
+		ctx.tunfd = receive_android_tunfd();
+	} else if ((ctx.tunfd = open("/dev/tun", O_RDWR|O_NONBLOCK)) < 0) {
+		/* requires root on Android */
+		exit_errno("could not open tun/tap device file");
+	}
+
+	fastd_poll_set_fd_tuntap();
+
+	pr_debug("tun device initialized.");
+}
+
+#elif defined(__linux__)
+
+/** Opens the TUN/TAP device */
+void fastd_tuntap_open(void) {
 	pr_debug("initializing tun/tap device...");
+
+	struct ifreq ifr = {};
 
 	if ((ctx.tunfd = open("/dev/net/tun", O_RDWR|O_NONBLOCK)) < 0)
 		exit_errno("could not open tun/tap device file");
