@@ -38,6 +38,10 @@ OPTION(option_forward, "--forward", "Enables forwarding of packets between peers
 SEPARATOR;
 #endif
 
+#ifdef __ANDROID__
+OPTION(option_android_tun, "--android-tun", "Read TUN handle from Android's LocalServerSocket");
+#endif
+
 #ifdef WITH_CMDLINE_COMMANDS
 OPTION_ARG(option_on_pre_up, "--on-pre-up", "<command>", "Sets a shell command to execute before interface creation");
 OPTION_ARG(option_on_up, "--on-up", "<command>", "Sets a shell command to execute after interface creation");

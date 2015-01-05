@@ -325,6 +325,13 @@ static void option_forward(void) {
 
 #endif
 
+#ifdef __ANDROID__
+/** Handles the --android-tun option */
+static void option_android_tun(void) {
+	conf.android_tun = true;
+}
+#endif
+
 #ifdef WITH_CMDLINE_COMMANDS
 
 /** Handles the --on-pre-up option */

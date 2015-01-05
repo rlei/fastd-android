@@ -381,6 +381,11 @@ static void configure_user(void) {
 	conf.uid = getuid();
 	conf.gid = getgid();
 
+#ifdef __ANDROID__
+	if (conf.user || conf.group) {
+		pr_warn("fastd doesn't support setting user/group on Android");
+	}
+#else
 	if (conf.user) {
 		struct passwd pwd, *pwdr;
 		size_t bufspace = 1024;
@@ -440,6 +445,7 @@ static void configure_user(void) {
 				conf.groups[i] = groups[i];
 		}
 	}
+#endif
 }
 
 /** Initializes global configuration that depends on the configured methods */
@@ -600,7 +606,11 @@ static void configure_peers(void) {
 
 		peer->config_state = CONFIG_STATIC;
 
+		// When network connectivity changes, Android GUI sends SIGHUP to fastd,
+		// and the peer socket must be recreated in this case.
+#ifndef __ANDROID__
 		if (!fastd_peer_is_established(peer))
+#endif
 			fastd_peer_reset(peer);
 	}
 }

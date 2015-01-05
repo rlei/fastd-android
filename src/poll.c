@@ -72,7 +72,11 @@ static inline int handshake_timeout(void) {
 
 
 void fastd_poll_init(void) {
+#ifdef __ANDROID__
+	ctx.epoll_fd = epoll_create(1);
+#else
 	ctx.epoll_fd = epoll_create1(0);
+#endif
 	if (ctx.epoll_fd < 0)
 		exit_errno("epoll_create1");
 
@@ -154,7 +158,15 @@ void fastd_poll_handle(void) {
 	sigemptyset(&set);
 
 	struct epoll_event events[16];
+#ifdef __ANDROID__
+	// Android Bionic doens't have epoll_pwait before API level 21
+	sigset_t oldset;
+	pthread_sigmask(SIG_SETMASK, &set, &oldset);
+	int ret = epoll_wait(ctx.epoll_fd, events, 16, timeout);
+	pthread_sigmask(SIG_SETMASK, &oldset, NULL);
+#else
 	int ret = epoll_pwait(ctx.epoll_fd, events, 16, timeout, &set);
+#endif
 	if (ret < 0 && errno != EINTR)
 		exit_errno("epoll_pwait");
 

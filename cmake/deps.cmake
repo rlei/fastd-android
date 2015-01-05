@@ -4,11 +4,15 @@ if(NOT DARWIN)
   set(PTHREAD_LDFLAGS -pthread)
 endif(NOT DARWIN)
 
+if(ANDROID_ABI)
+  find_host_package(BISON 2.5 REQUIRED)
+  find_host_package(PkgConfig REQUIRED)
+else(ANDROID_ABI)
+  find_package(BISON 2.5 REQUIRED)
+  find_package(PkgConfig REQUIRED)
+endif(ANDROID_ABI)
 
-find_package(BISON 2.5 REQUIRED)
-find_package(PkgConfig REQUIRED)
 pkg_check_modules(UECC REQUIRED libuecc>=3)
-
 
 set(NACL_INCLUDE_DIRS "")
 set(NACL_CFLAGS_OTHER "")
@@ -59,7 +63,6 @@ else(WITH_CAPABILITIES)
   set(CAP_INCLUDE_DIR "")
   set(CAP_LIBRARY "")
 endif(WITH_CAPABILITIES)
-
 if(WITH_STATUS_SOCKET)
   pkg_check_modules(JSONC REQUIRED json-c)
 else(WITH_STATUS_SOCKET)
