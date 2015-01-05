@@ -241,6 +241,9 @@ static inline void write_pid(void) {
 	if (!conf.pid_file)
 		return;
 
+#ifdef __ANDROID__
+	pr_warn("fastd doesn't support pid file on Android");
+#else
 	uid_t uid = geteuid();
 	gid_t gid = getegid();
 
@@ -268,6 +271,7 @@ static inline void write_pid(void) {
 		pr_debug_errno("seteuid");
 	if (setegid(gid) < 0)
 		pr_debug_errno("setegid");
+#endif
 }
 
 /** Switches to the configured user */
