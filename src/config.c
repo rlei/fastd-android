@@ -383,7 +383,7 @@ static void configure_user(void) {
 
 #ifdef __ANDROID__
 	if (conf.user || conf.group) {
-		pr_warn("fastd doesn't support setting user/group on Android");
+		exit_error("config error: setting user/group is not supported on Android");
 	}
 #else
 	if (conf.user) {
@@ -606,12 +606,15 @@ static void configure_peers(void) {
 
 		peer->config_state = CONFIG_STATIC;
 
-		// When network connectivity changes, Android GUI sends SIGHUP to fastd,
-		// and the peer socket must be recreated in this case.
-#ifndef __ANDROID__
+#ifdef __ANDROID__
+		/* When network connectivity changes, Android GUI sends SIGHUP to fastd.
+		 * Peer socket must be recreated in this case.
+		 */
+		fastd_peer_reset(peer);
+#else
 		if (!fastd_peer_is_established(peer))
-#endif
 			fastd_peer_reset(peer);
+#endif
 	}
 }
 

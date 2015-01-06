@@ -103,12 +103,6 @@ static inline uint32_t as_uint(const fastd_handshake_record_t *record) {
 	}
 }
 
-#ifdef __ANDROID__
-/** dirty quick stpcpy() implementation for Android */
-static char *stpcpy(char *dest, const char *src) {
-	return strcpy(dest, src) + strlen(dest);
-}
-#endif
 
 /** Generates a zero-separated list of supported methods */
 static uint8_t * create_method_list(size_t *len) {

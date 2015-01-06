@@ -36,10 +36,7 @@
 #include <sys/ioctl.h>
 
 #ifdef __ANDROID__
-#include <sys/socket.h>
 #include <sys/un.h>
-#include <stdlib.h>
-#include <unistd.h>
 #endif
 
 #ifdef __linux__
@@ -70,8 +67,9 @@ static const bool multiaf_tun = true;
 #if defined(__linux__)
 
 #ifdef __ANDROID__
-// http://www.normalesup.org/~george/comp/libancillary/
-// TODO: move libancillary to a separate file
+/* http://www.normalesup.org/~george/comp/libancillary/
+ * TODO: move libancillary to a separate file
+ */
 
 /***************************************************************************
  * libancillary - black magic on Unix domain sockets
@@ -161,11 +159,11 @@ ancil_send_fd(int sock, int fd)
     return(ancil_send_fds_with_buffer(sock, &fd, 1, &buffer));
 }
 
-// TODO: move this to ctx.ctrl_sock
+/* TODO: move this to ctx.ctrl_sock */
 static int ctrl_sock;
 
 void init_ctrl_sock() {
-    // Must keep consistent with FastdVpnService
+    /* Must keep consistent with FastdVpnService */
     const char *sockname = "fastd_tun_sock";
     struct sockaddr_un addr;
 
@@ -175,7 +173,7 @@ void init_ctrl_sock() {
 
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    addr.sun_path[0] = 0;     // Linux's abstract unix domain socket name
+    addr.sun_path[0] = 0;     /* Linux's abstract unix domain socket name */
     strncpy(addr.sun_path + 1, sockname, sizeof(addr.sun_path) - 2);
     int socklen = offsetof(struct sockaddr_un, sun_path) + strlen(sockname) + 1;
 
@@ -195,8 +193,9 @@ int receive_tunfd() {
         pr_debug("Received fd: %u", handle);
     }
 
-    // Dirty hack for now: sending back pid (instead of writing pid file)
-    // TODO: extract the whole control socket logic
+    /* Dirty hack for now: sending back pid (instead of writing pid file)
+     * TODO: extract the whole control socket logic
+     */
     char pid[20];
     snprintf(pid, sizeof(pid), "%u", (unsigned)getpid());
     if (write(ctrl_sock, pid, strlen(pid)) != strlen(pid)) {
@@ -229,11 +228,14 @@ void fastd_tuntap_open(void) {
 	pr_debug("initializing tun/tap device...");
 
 #ifdef __ANDROID__
+	if (conf.mode != MODE_TUN) {
+		exit_error("Android supports only TUN mode");
+	}
 	if (conf.android_tun) {
 		pr_debug("using android TUN fd");
 		ctx.tunfd = receive_tunfd();
 	} else if ((ctx.tunfd = open("/dev/tun", O_RDWR|O_NONBLOCK)) < 0) {
-		// requires root on Android
+		/* requires root on Android */
 		exit_errno("could not open tun/tap device file");
 	}
 #else
