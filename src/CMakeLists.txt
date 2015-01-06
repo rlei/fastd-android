@@ -48,22 +48,16 @@ add_executable(fastd
   ${BISON_fastd_config_parse_OUTPUTS}
 )
 set_property(TARGET fastd PROPERTY COMPILE_FLAGS "${FASTD_CFLAGS}")
+
+set(FASTD_LDFLAGS "${PTHREAD_LDFLAGS} ${UECC_LDFLAGS_OTHER} ${NACL_LDFLAGS_OTHER} ${OPENSSL_CRYPTO_LDFLAGS_OTHER} ${JSONC_LDFLAGS_OTHER} ${LDFLAGS_LTO}")
 if(ANDROID_ABI)
     # Android 5.0+ requires PIE binaries.
-    # Also removes UECC/NACL .so directives as we're linking with static libs
-    set_property(TARGET fastd PROPERTY LINK_FLAGS "-fPIE -pie ${PTHREAD_LDFLAGS} ${OPENSSL_CRYPTO_LDFLAGS_OTHER} ${JSONC_LDFLAGS_OTHER} ${LDFLAGS_LTO}")
-else(ANDROID_ABI)
-    set_property(TARGET fastd PROPERTY LINK_FLAGS "${PTHREAD_LDFLAGS} ${UECC_LDFLAGS_OTHER} ${NACL_LDFLAGS_OTHER} ${OPENSSL_CRYPTO_LDFLAGS_OTHER} ${JSONC_LDFLAGS_OTHER} ${LDFLAGS_LTO}")
+    set(FASTD_LDFLAGS "-fPIE -pie ${FASTD_LDFLAGS}")
 endif(ANDROID_ABI)
 
+set_property(TARGET fastd PROPERTY LINK_FLAGS "${FASTD_LDFLAGS}")
 set_property(TARGET fastd APPEND PROPERTY INCLUDE_DIRECTORIES ${CAP_INCLUDE_DIR} ${NACL_INCLUDE_DIRS} ${JSONC_INCLUDE_DIRS})
-if(ANDROID_ABI)
-    # Link with static uecc lib (using $UECC_LDFLAGS_OTHER)
-    # NaCL/libsodium static lib is statically linked in crypto sub targets
-    target_link_libraries(fastd protocols methods ciphers macs ${RT_LIBRARY} ${CAP_LIBRARY} ${UECC_LDFLAGS_OTHER} ${OPENSSL_CRYPTO_LIBRARIES} ${JSONC_LIBRARIES})
-else(ANDROID_ABI)
-    target_link_libraries(fastd protocols methods ciphers macs ${RT_LIBRARY} ${CAP_LIBRARY} ${UECC_LIBRARIES} ${NACL_LIBRARIES} ${OPENSSL_CRYPTO_LIBRARIES} ${JSONC_LIBRARIES})
-endif(ANDROID_ABI)
+target_link_libraries(fastd protocols methods ciphers macs ${RT_LIBRARY} ${CAP_LIBRARY} ${UECC_LIBRARIES} ${NACL_LIBRARIES} ${OPENSSL_CRYPTO_LIBRARIES} ${JSONC_LIBRARIES})
 
 add_dependencies(fastd version)
 
