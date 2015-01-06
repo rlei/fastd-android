@@ -42,9 +42,13 @@ if [ ! -f "dist-build/android-armv7.sh" ]; then
 fi
 if [ ! -d "libsodium-android-arm" ]; then
     dist-build/android-armv7.sh || exit 2
+    # for static link using cmake
+    rm libsodium-android-arm/lib/libsodium.so
 fi
 if [ ! -d "libsodium-android-x86" ]; then
     dist-build/android-x86.sh || exit 2
+    # for static link using cmake
+    rm libsodium-android-x86/lib/libsodium.so
 fi
 popd > /dev/null
 
@@ -82,6 +86,8 @@ if [ ! -d "libuecc-build-arm" ]; then
     pushd libuecc-build-arm > /dev/null
     ANDROID_STANDALONE_TOOLCHAIN=${TOOLCHAIN_ARM} ${ANDROID_CMAKE} ../${LIBUECC_PATH} || exit 5
     make && make install || exit 6
+    # for static link using cmake
+    rm ${TOOLCHAIN_ARM}/user/lib/libuecc.so*
     popd > /dev/null;
     echo ">> libuecc arm built."
 fi
@@ -90,6 +96,8 @@ if [ ! -d "libuecc-build-x86" ]; then
     pushd libuecc-build-x86 > /dev/null
     ANDROID_STANDALONE_TOOLCHAIN=${TOOLCHAIN_X86} ${ANDROID_CMAKE} ../${LIBUECC_PATH} || exit 5
     make && make install || exit 6
+    # for static link using cmake
+    rm ${TOOLCHAIN_X86}/user/lib/libuecc.so*
     popd > /dev/null;
     echo ">> libuecc x86 built."
 fi
@@ -97,17 +105,13 @@ fi
 if [ ! -d "${TOOLCHAIN_ARM}/lib/pkgconfig" ]; then
     cp -a ${TOOLCHAIN_ARM}/user/lib/pkgconfig ${TOOLCHAIN_ARM}/lib/
     cp ${LIBSODIUM_PATH}/libsodium-android-arm/lib/pkgconfig/libsodium.pc ${TOOLCHAIN_ARM}/lib/pkgconfig/
-    sed -i.bak 's/-L\${libdir} -lsodium/\${libdir}\/libsodium.a/' ${TOOLCHAIN_ARM}/lib/pkgconfig/libsodium.pc
-    sed -i.bak 's/-L\${libdir} -luecc/\${libdir}\/libuecc.a/' ${TOOLCHAIN_ARM}/lib/pkgconfig/libuecc.pc
-    echo ">> pkgconfig file patched for arm builds."
+    echo ">> pkgconfig files copied for arm builds."
 fi
 
 if [ ! -d "${TOOLCHAIN_X86}/lib/pkgconfig" ]; then
     cp -a ${TOOLCHAIN_X86}/user/lib/pkgconfig ${TOOLCHAIN_X86}/lib/
     cp ${LIBSODIUM_PATH}/libsodium-android-arm/lib/pkgconfig/libsodium.pc ${TOOLCHAIN_X86}/lib/pkgconfig/
-    sed -i.bak 's/-L\${libdir} -lsodium/\${libdir}\/libsodium.a/' ${TOOLCHAIN_X86}/lib/pkgconfig/libsodium.pc
-    sed -i.bak 's/-L\${libdir} -luecc/\${libdir}\/libuecc.a/' ${TOOLCHAIN_X86}/lib/pkgconfig/libuecc.pc
-    echo ">> pkgconfig file patched for x86 builds."
+    echo ">> pkgconfig files copied for x86 builds."
 fi
 
 HOMEBREW_BISON_PATH=`find /usr/local/Cellar/bison -name bin`
