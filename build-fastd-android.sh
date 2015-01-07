@@ -14,6 +14,7 @@ SODIUM_VER=1.0.1
 UECC_VER=4
 LIBSODIUM_PATH=libsodium-${SODIUM_VER}
 LIBUECC_PATH=libuecc-${UECC_VER}
+ANDROID_NATIVE_LEVEL=16
 
 if [ x$ANDROID_NDK_HOME == x ]; then
     echo "Set ANDROID_NDK_HOME first"; exit 1;
@@ -62,58 +63,42 @@ CMAKE_TOOLCHAIN=${WORK_DIR}/android-cmake/android.toolchain.cmake
 ANDROID_CMAKE="cmake -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN}"
 echo ">> android-cmake ready."
 
-MAKE_TOOLCHAIN=${ANDROID_NDK_HOME}/build/tools/make-standalone-toolchain.sh
-TOOLCHAIN_ARM=${WORK_DIR}/android-toolchain-arm
-TOOLCHAIN_X86=${WORK_DIR}/android-toolchain-x86
-if [ ! -d "${TOOLCHAIN_ARM}" ]; then
-    $MAKE_TOOLCHAIN --platform=android-16 --arch=arm --install-dir=${TOOLCHAIN_ARM} || exit 3
-fi
-if [ ! -d "${TOOLCHAIN_X86}" ]; then
-    $MAKE_TOOLCHAIN --platform=android-16 --arch=x86 --install-dir=${TOOLCHAIN_X86} || exit 3
-fi
-echo ">> android toolchains ready."
-
-# from now on we won't use ANDROID_NDK_HOME to allow proper standalone toolchain detecting for libuecc
-unset ANDROID_NDK_HOME
+CMAKE_COMMON_DEFS="-DCMAKE_BUILD_TYPE=Release -DANDROID_NDK=${ANDROID_NDK_HOME} -DANDROID_NATIVE_API_LEVEL=${ANDROID_NATIVE_LEVEL}"
 
 if [ -d "${LIBUECC_PATH}" ]; then
     echo "It seems you already have libuecc downloaded.";
 else
     curl -k -L https://projects.universe-factory.net/attachments/download/71/libuecc-${UECC_VER}.tar.xz | tar Jxf - || exit 4
 fi
-if [ ! -d "libuecc-build-arm" ]; then
-    mkdir libuecc-build-arm
-    pushd libuecc-build-arm > /dev/null
-    ANDROID_STANDALONE_TOOLCHAIN=${TOOLCHAIN_ARM} ${ANDROID_CMAKE} ../${LIBUECC_PATH} || exit 5
-    make && make install || exit 6
-    # for static link using cmake
-    rm ${TOOLCHAIN_ARM}/user/lib/libuecc.so*
-    popd > /dev/null;
-    echo ">> libuecc arm built."
-fi
-if [ ! -d "libuecc-build-x86" ]; then
-    mkdir libuecc-build-x86
-    pushd libuecc-build-x86 > /dev/null
-    ANDROID_STANDALONE_TOOLCHAIN=${TOOLCHAIN_X86} ${ANDROID_CMAKE} ../${LIBUECC_PATH} || exit 5
-    make && make install || exit 6
-    # for static link using cmake
-    rm ${TOOLCHAIN_X86}/user/lib/libuecc.so*
-    popd > /dev/null;
-    echo ">> libuecc x86 built."
+for ARCH in arm x86; do
+    BUILD_DIR=libuecc-${ARCH}
+    if [ ! -d "${BUILD_DIR}" ]; then
+        mkdir ${BUILD_DIR} && pushd ${BUILD_DIR} > /dev/null
+        if [ ${ARCH} == arm ]; then
+            _USE_ABI="armeabi-v7a"
+        else
+            _USE_ABI=${ARCH}
+        fi
+        ${ANDROID_CMAKE} -DANDROID_ABI="$_USE_ABI" ${CMAKE_COMMON_DEFS} -DCMAKE_INSTALL_PREFIX=`pwd`/output ../${LIBUECC_PATH} || exit 5
+        make && make install || exit 6
+        # for static link using cmake
+        rm output/lib/libuecc.so*
+        popd > /dev/null;
+        echo ">> libuecc ${ARCH} built."
+    fi
+done
+
+if [ ! -d "pkgconfig" ]; then
+    mkdir pkgconfig
+    for ARCH in arm x86; do
+        mkdir pkgconfig/${ARCH}
+        cp libuecc-${ARCH}/output/lib/pkgconfig/libuecc.pc pkgconfig/${ARCH}
+        cp ${LIBSODIUM_PATH}/libsodium-android-${ARCH}/lib/pkgconfig/libsodium.pc pkgconfig/${ARCH}
+    done
+    echo ">> pkgconfig files prepared."
 fi
 
-if [ ! -d "${TOOLCHAIN_ARM}/lib/pkgconfig" ]; then
-    cp -a ${TOOLCHAIN_ARM}/user/lib/pkgconfig ${TOOLCHAIN_ARM}/lib/
-    cp ${LIBSODIUM_PATH}/libsodium-android-arm/lib/pkgconfig/libsodium.pc ${TOOLCHAIN_ARM}/lib/pkgconfig/
-    echo ">> pkgconfig files copied for arm builds."
-fi
-
-if [ ! -d "${TOOLCHAIN_X86}/lib/pkgconfig" ]; then
-    cp -a ${TOOLCHAIN_X86}/user/lib/pkgconfig ${TOOLCHAIN_X86}/lib/
-    cp ${LIBSODIUM_PATH}/libsodium-android-arm/lib/pkgconfig/libsodium.pc ${TOOLCHAIN_X86}/lib/pkgconfig/
-    echo ">> pkgconfig files copied for x86 builds."
-fi
-
+# detect HomeBrew installed bison for OS X
 HOMEBREW_BISON_PATH=`find /usr/local/Cellar/bison -name bin`
 if [ x${HOMEBREW_BISON_PATH} != x ]; then
     USE_PATH=${HOMEBREW_BISON_PATH}:$PATH
@@ -121,31 +106,34 @@ else
     USE_PATH=$PATH
 fi
 
-COMMON_FASTD_BUILD_ARGS="-DWITH_CAPABILITIES=OFF -DWITH_STATUS_SOCKET=OFF -DENABLE_SYSTEMD=FALSE -DWITH_CIPHER_AES128_CTR=FALSE -DWITH_METHOD_XSALSA20_POLY1305=FALSE -DWITH_METHOD_GENERIC_POLY1305=FALSE -DWITH_CMDLINE_COMMANDS=FALSE"
+FASTD_ANDROID_DEFS="-DWITH_CAPABILITIES=OFF -DWITH_STATUS_SOCKET=OFF -DENABLE_SYSTEMD=FALSE -DWITH_CIPHER_AES128_CTR=FALSE -DWITH_METHOD_XSALSA20_POLY1305=FALSE -DWITH_METHOD_GENERIC_POLY1305=FALSE -DWITH_CMDLINE_COMMANDS=FALSE"
 
-if [ ! -d "fastd-build-arm" ]; then
-    mkdir fastd-build-arm
-fi
+for ARCH in arm x86; do
+    BUILD_DIR=fastd-${ARCH}
+    if [ ! -d "BUILD_DIR" ]; then
+        mkdir ${BUILD_DIR}
+    fi
+    pushd ${BUILD_DIR} > /dev/null
+    if [ ! -f "Makefile" ]; then
+        if [ ${ARCH} == arm ]; then
+            _USE_ABI="armeabi-v7a"
+            ADD_DEFS="-DWITH_CIPHER_SALSA2012_NACL=TRUE -DWITH_CIPHER_SALSA20_NACL=TRUE"
+        else
+            _USE_ABI=${ARCH}
+            ADD_DEFS="-DWITH_CIPHER_SALSA2012_NACL=FALSE -DWITH_CIPHER_SALSA20_NACL=FALSE"
+        fi
 
-pushd fastd-build-arm > /dev/null
-if [ ! -f "Makefile" ]; then
-    PATH=${USE_PATH} ANDROID_STANDALONE_TOOLCHAIN=${TOOLCHAIN_ARM} PKG_CONFIG_LIBDIR=$ANDROID_STANDALONE_TOOLCHAIN/lib/pkgconfig ${ANDROID_CMAKE} ${COMMON_FASTD_BUILD_ARGS} -DWITH_CIPHER_SALSA2012_NACL=TRUE -DWITH_CIPHER_SALSA20_NACL=TRUE -DEXECUTABLE_OUTPUT_PATH=`pwd` ../.. || exit 7
-fi
+        PATH=${USE_PATH} PKG_CONFIG_LIBDIR=../pkgconfig/${ARCH} \
+            ${ANDROID_CMAKE} \
+            -DANDROID_ABI="$_USE_ABI" ${CMAKE_COMMON_DEFS} \
+            ${FASTD_ANDROID_DEFS} \
+            ${ADD_DEFS} -DEXECUTABLE_OUTPUT_PATH=`pwd` \
+            ../.. || exit 7
+    fi
 
-make && echo ">> fastd arm build ready in build/fastd-build-arm/"
-popd > /dev/null
-
-if [ ! -d "fastd-build-x86" ]; then
-    mkdir fastd-build-x86
-fi
-
-pushd fastd-build-x86 /dev/null
-if [ ! -f "Makefile" ]; then
-    PATH=${USE_PATH} ANDROID_STANDALONE_TOOLCHAIN=${TOOLCHAIN_X86} PKG_CONFIG_LIBDIR=$ANDROID_STANDALONE_TOOLCHAIN/lib/pkgconfig ${ANDROID_CMAKE} ${COMMON_FASTD_BUILD_ARGS} -DWITH_CIPHER_SALSA2012_NACL=FALSE -DWITH_CIPHER_SALSA20_NACL=FALSE -DEXECUTABLE_OUTPUT_PATH=`pwd` ../.. || exit 7
-fi
-
-make && echo ">> fastd x86 build ready in build/fastd-build-x86/"
-popd > /dev/null
+    make && echo ">> fastd ${ARCH} build ready in build/${BUILD_DIR}"
+    popd > /dev/null
+done
 
 popd > /dev/null
 
