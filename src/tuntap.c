@@ -35,10 +35,6 @@
 #include <net/if.h>
 #include <sys/ioctl.h>
 
-#ifdef __ANDROID__
-#include <sys/un.h>
-#endif
-
 #ifdef __linux__
 
 #include <linux/if_tun.h>
@@ -63,182 +59,34 @@ static const bool multiaf_tun = false;
 static const bool multiaf_tun = true;
 #endif
 
-
-#if defined(__linux__)
-
-#ifdef __ANDROID__
-/* http://www.normalesup.org/~george/comp/libancillary/
- * TODO: move libancillary to a separate file
- */
-
-/***************************************************************************
- * libancillary - black magic on Unix domain sockets
- * (C) Nicolas George
- * fd_send.c - receiving file descriptors
- ***************************************************************************/
-
-#define ANCIL_FD_BUFFER(n) \
-    struct { \
-	struct cmsghdr h; \
-	int fd[n]; \
-    }
-
-int
-ancil_recv_fds_with_buffer(int sock, int *fds, unsigned n_fds, void *buffer)
-{
-    struct msghdr msghdr;
-    char nothing;
-    struct iovec nothing_ptr;
-    struct cmsghdr *cmsg;
-    int i;
-
-    nothing_ptr.iov_base = &nothing;
-    nothing_ptr.iov_len = 1;
-    msghdr.msg_name = NULL;
-    msghdr.msg_namelen = 0;
-    msghdr.msg_iov = &nothing_ptr;
-    msghdr.msg_iovlen = 1;
-    msghdr.msg_flags = 0;
-    msghdr.msg_control = buffer;
-    msghdr.msg_controllen = sizeof(struct cmsghdr) + sizeof(int) * n_fds;
-    cmsg = CMSG_FIRSTHDR(&msghdr);
-    cmsg->cmsg_len = msghdr.msg_controllen;
-    cmsg->cmsg_level = SOL_SOCKET;
-    cmsg->cmsg_type = SCM_RIGHTS;
-    for(i = 0; i < n_fds; i++)
-	((int *)CMSG_DATA(cmsg))[i] = -1;
-    
-    if(recvmsg(sock, &msghdr, 0) < 0)
-	return(-1);
-    for(i = 0; i < n_fds; i++)
-	fds[i] = ((int *)CMSG_DATA(cmsg))[i];
-    n_fds = (cmsg->cmsg_len - sizeof(struct cmsghdr)) / sizeof(int);
-    return(n_fds);
-}
-
-int
-ancil_recv_fd(int sock, int *fd)
-{
-    ANCIL_FD_BUFFER(1) buffer;
-
-    return(ancil_recv_fds_with_buffer(sock, fd, 1, &buffer) == 1 ? 0 : -1);
-}
-
-int
-ancil_send_fds_with_buffer(int sock, const int *fds, unsigned n_fds, void *buffer)
-{
-    struct msghdr msghdr;
-    char nothing = '!';
-    struct iovec nothing_ptr;
-    struct cmsghdr *cmsg;
-    int i;
-
-    nothing_ptr.iov_base = &nothing;
-    nothing_ptr.iov_len = 1;
-    msghdr.msg_name = NULL;
-    msghdr.msg_namelen = 0;
-    msghdr.msg_iov = &nothing_ptr;
-    msghdr.msg_iovlen = 1;
-    msghdr.msg_flags = 0;
-    msghdr.msg_control = buffer;
-    msghdr.msg_controllen = sizeof(struct cmsghdr) + sizeof(int) * n_fds;
-    cmsg = CMSG_FIRSTHDR(&msghdr);
-    cmsg->cmsg_len = msghdr.msg_controllen;
-    cmsg->cmsg_level = SOL_SOCKET;
-    cmsg->cmsg_type = SCM_RIGHTS;
-    for(i = 0; i < n_fds; i++)
-	((int *)CMSG_DATA(cmsg))[i] = fds[i];
-    return(sendmsg(sock, &msghdr, 0) >= 0 ? 0 : -1);
-}
-
-int
-ancil_send_fd(int sock, int fd)
-{
-    ANCIL_FD_BUFFER(1) buffer;
-
-    return(ancil_send_fds_with_buffer(sock, &fd, 1, &buffer));
-}
-
-/* TODO: move this to ctx.ctrl_sock */
-static int ctrl_sock;
-
-void init_ctrl_sock() {
-    /* Must keep consistent with FastdVpnService */
-    const char *sockname = "fastd_tun_sock";
-    struct sockaddr_un addr;
-
-    if ((ctrl_sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-		exit_errno("could not create unix domain socket");
-    }
-
-    memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    addr.sun_path[0] = 0;     /* Linux's abstract unix domain socket name */
-    strncpy(addr.sun_path + 1, sockname, sizeof(addr.sun_path) - 2);
-    int socklen = offsetof(struct sockaddr_un, sun_path) + strlen(sockname) + 1;
-
-    if (connect(ctrl_sock, (struct sockaddr*)&addr, socklen) == -1) {
-		exit_errno("could not connect to Android LocalServerSocket");
-    }
-}
-
-int receive_tunfd() {
-    if (!ctrl_sock) {
-        init_ctrl_sock();
-    }
-    int handle;
-    if(ancil_recv_fd(ctrl_sock, &handle)) {
-		exit_errno("could not receive handle from Android LocalServerSocket");
-    } else {
-        pr_debug("Received fd: %u", handle);
-    }
-
-    /* Dirty hack for now: sending back pid (instead of writing pid file)
-     * TODO: extract the whole control socket logic
-     */
-    char pid[20];
-    snprintf(pid, sizeof(pid), "%u", (unsigned)getpid());
-    if (write(ctrl_sock, pid, strlen(pid)) != strlen(pid)) {
-		pr_error_errno("send pid");
-    }
-
-    return handle;
-}
-
-void android_protect_socket(int sock) {
-    if (!conf.android_tun) {
-        return;
-    }
-
-    if (!ctrl_sock) {
-        init_ctrl_sock();
-    }
-    pr_debug("sending fd to protect");
-    ancil_send_fd(ctrl_sock, sock);
-    char buf[100];
-    if (read(ctrl_sock, buf, sizeof(buf)) == -1) {
-		pr_error_errno("read ack");
-    }
-}
-
-#endif
+#if defined(__ANDROID__)
 
 /** Opens the TUN/TAP device */
 void fastd_tuntap_open(void) {
-	pr_debug("initializing tun/tap device...");
+	pr_debug("initializing tun device...");
 
-#ifdef __ANDROID__
 	if (conf.mode != MODE_TUN) {
 		exit_error("Android supports only TUN mode");
 	}
 	if (conf.android_tun) {
 		pr_debug("using android TUN fd");
-		ctx.tunfd = receive_tunfd();
+		ctx.tunfd = receive_android_tunfd();
 	} else if ((ctx.tunfd = open("/dev/tun", O_RDWR|O_NONBLOCK)) < 0) {
 		/* requires root on Android */
 		exit_errno("could not open tun/tap device file");
 	}
-#else
+
+	fastd_poll_set_fd_tuntap();
+
+	pr_debug("tun device initialized.");
+}
+
+#elif defined(__linux__)
+
+/** Opens the TUN/TAP device */
+void fastd_tuntap_open(void) {
+	pr_debug("initializing tun/tap device...");
+
 	struct ifreq ifr = {};
 
 	if ((ctx.tunfd = open("/dev/net/tun", O_RDWR|O_NONBLOCK)) < 0)
@@ -281,7 +129,6 @@ void fastd_tuntap_open(void) {
 
 	if (close(ctl_sock))
 		pr_error_errno("close");
-#endif
 
 	fastd_poll_set_fd_tuntap();
 
