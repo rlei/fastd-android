@@ -4,6 +4,7 @@ set(FASTD_CFLAGS "${PTHREAD_CFLAGS} -std=c99 ${UECC_CFLAGS_OTHER} ${NACL_CFLAGS_
 if(ANDROID)
     # Android 5.0+ requires PIE binaries.
     set(FASTD_CFLAGS "-fPIE ${FASTD_CFLAGS}")
+    set(ADDITIONAL_SRCS android_ctrl_sock.c)
 endif(ANDROID)
 
 include_directories(${FASTD_SOURCE_DIR} ${FASTD_BINARY_DIR}/src)
@@ -23,6 +24,7 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/fastd_config.h.in ${CMAKE_CURRENT_BIN
 BISON_TARGET(fastd_config_parse config.y ${CMAKE_CURRENT_BINARY_DIR}/config.yy.c)
 
 add_executable(fastd
+  ${ADDITIONAL_SRCS}
   async.c
   capabilities.c
   config.c

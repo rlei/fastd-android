@@ -342,7 +342,8 @@ void fastd_socket_close(fastd_socket_t *sock);
 void fastd_socket_error(fastd_socket_t *sock);
 
 #ifdef __ANDROID__
-void android_protect_socket(int sock);
+int receive_android_tunfd(void);
+bool fastd_socket_android_protect(fastd_socket_t *sock);
 #endif
 
 void fastd_resolve_peer(fastd_peer_t *peer, fastd_remote_t *remote);
