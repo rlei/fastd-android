@@ -118,7 +118,7 @@ static void send_type(const fastd_socket_t *sock, const fastd_peer_address_t *lo
 	msg.msg_controllen = 0;
 
 #ifndef __ANDROID__
-	// PKTINFO will mess with Android VpnService.protect(socket)
+	/* PKTINFO will mess with Android VpnService.protect(socket) */
 	add_pktinfo(&msg, local_addr);
 #endif
 
