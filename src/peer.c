@@ -247,7 +247,11 @@ void fastd_peer_reset_socket(fastd_peer_t *peer) {
 		return;
 
 #ifdef __ANDROID__
-	fast_socket_android_protect(peer->sock);
+	if (!fastd_socket_android_protect(peer->sock)) {
+		pr_error("error protecting socket");
+		free_socket_by_id(i);
+		return;
+	}
 #endif
 
 	fastd_poll_set_fd_peer(i);

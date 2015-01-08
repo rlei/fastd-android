@@ -85,7 +85,7 @@ static int ancil_recv_fd(int sock, int *fd) {
 	return ancil_recv_fds_with_buffer(sock, fd, 1, &buffer) == 1 ? 0 : -1;
 }
 
-int ancil_send_fds_with_buffer(int sock, const int *fds, unsigned n_fds, void *buffer) {
+static int ancil_send_fds_with_buffer(int sock, const int *fds, unsigned n_fds, void *buffer) {
 	struct msghdr msghdr;
 	char nothing = '!';
 	struct iovec nothing_ptr;
@@ -111,7 +111,7 @@ int ancil_send_fds_with_buffer(int sock, const int *fds, unsigned n_fds, void *b
 	return sendmsg(sock, &msghdr, 0) >= 0 ? 0 : -1;
 }
 
-int ancil_send_fd(int sock, int fd)
+static int ancil_send_fd(int sock, int fd)
 {
 	ANCIL_FD_BUFFER(1) buffer;
 
@@ -123,6 +123,9 @@ int ancil_send_fd(int sock, int fd)
  */
 
 static int android_ctrl_sock;
+
+#define PROTECT_ACK_OK 'X'
+#define PROTECT_ACK_ERROR 'E'
 
 static void init_ctrl_sock() {
 	/* Must keep consistent with FastdVpnService */
@@ -166,8 +169,9 @@ int receive_android_tunfd(void) {
 	return handle;
 }
 
-bool fast_socket_android_protect(fastd_socket_t * sock) {
+bool fastd_socket_android_protect(fastd_socket_t * sock) {
 	if (!conf.android_tun) {
+        /* standalone (non GUI) mode */
 		return true;
 	}
 
@@ -183,6 +187,6 @@ bool fast_socket_android_protect(fastd_socket_t * sock) {
 		pr_error_errno("read ack");
 		return false;
 	}
-	return true;
+	return buf[0] == PROTECT_ACK_OK;
 }
 
