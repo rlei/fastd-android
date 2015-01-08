@@ -2,7 +2,7 @@ set(HAVE_LIBSODIUM FALSE)
 
 get_property(nacl_required GLOBAL PROPERTY NACL_REQUIRED)
 if(${nacl_required})
-  if("${NACL_LIBRARIES}" STREQUAL "" AND "${NACL_LDFLAGS_OTHER}" STREQUAL "")
+  if("${NACL_LIBRARIES}" STREQUAL "")
     if(ENABLE_LIBSODIUM)
       message(FATAL_ERROR "libsodium is not available, but a selected module needs it")
     else(ENABLE_LIBSODIUM)
