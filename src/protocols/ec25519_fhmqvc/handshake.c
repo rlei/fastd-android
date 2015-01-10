@@ -49,32 +49,6 @@
 #endif
 
 
-/** TLV field: sender public key */
-#define RECORD_SENDER_KEY RECORD_PROTOCOL1
-
-/** TLV field: recipient public key */
-#define RECORD_RECIPIENT_KEY RECORD_PROTOCOL2
-
-/** TLV field: sender ephemeral public key */
-#define RECORD_SENDER_HANDSHAKE_KEY RECORD_PROTOCOL3
-
-/** TLV field: recipient ephemeral public key */
-#define RECORD_RECIPIENT_HANDSHAKE_KEY RECORD_PROTOCOL4
-
-/**
-   TLV field: pre-v11 compat handshake MAC
-
-   The pre-v11 handshake protocol only secured the four key fields
-   of the handshake with a MAC, which allowed manipulation of other fields like
-   the method list; it was replaced by the RECORD_TLV_MAC field in the new
-   handshake protocol.
-
-   In pre-v11 compat mode fastd ("secure handshakes no") will include both the old and the new
-   record in the handshake.
-*/
-#define RECORD_T RECORD_PROTOCOL5
-
-
 /** Derives a key of arbitraty length from the shared key material after a handshake using the HKDF algorithm */
 static void derive_key(fastd_sha256_t *out, size_t blocks, const uint32_t *salt, const char *method_name,
 		       const aligned_int256_t *A, const aligned_int256_t *B, const aligned_int256_t *X, const aligned_int256_t *Y,
@@ -218,7 +192,7 @@ static bool make_shared_handshake_key(bool initiator, const keypair_t *handshake
 	if (!ecc_25519_load_packed(&workXY, &peer_handshake_key->int256))
 		return false;
 
-	if (!fastd_protocol_ec25519_fhmqvc_check_key(&workXY))
+	if (ecc_25519_is_identity(&workXY))
 		return false;
 
 	if (initiator) {
@@ -261,6 +235,18 @@ static bool make_shared_handshake_key(bool initiator, const keypair_t *handshake
 	}
 
 	ecc_25519_add(&work, &workXY, &work);
+
+	/*
+	  Both our secret keys have been divided by 8 before, so we multiply
+	  the point with 8 here to compensate.
+
+	  By multiplying with 8, we prevent small-subgroup attacks (8 is the order
+	  of the curves twist, see djb's Curve25519 paper). While the factor 8 should
+	  be in the private keys anyways, the reduction modulo the subgroup order (in ecc_25519_gf_*)
+	  will only preserve it if the point actually lies on our subgroup.
+	*/
+	octuple_point(&work);
+
 	ecc_25519_scalarmult(&work, &s, &work);
 
 	if (ecc_25519_is_identity(&work))
@@ -331,7 +317,7 @@ static void respond_handshake(const fastd_socket_t *sock, const fastd_peer_addre
 
 	if (!conf.secure_handshakes) {
 		fastd_hmacsha256_blocks(&hmacbuf, peer->protocol_state->shared_handshake_key_compat.w, conf.protocol_config->key.public.u32, handshake_key->key.public.u32, NULL);
-		fastd_handshake_add(&buffer, RECORD_T, HASHBYTES, hmacbuf.b);
+		fastd_handshake_add(&buffer, RECORD_HANDSHAKE_TAG, HASHBYTES, hmacbuf.b);
 	}
 
 	uint8_t *mac = fastd_handshake_add_zero(&buffer, RECORD_TLV_MAC, HASHBYTES);
@@ -367,7 +353,7 @@ static void finish_handshake(fastd_socket_t *sock, const fastd_peer_address_t *l
 		valid = fastd_hmacsha256_verify(mac, shared_handshake_key.w, handshake->tlv_data, handshake->tlv_len);
 	}
 	else {
-		valid = fastd_hmacsha256_blocks_verify(handshake->records[RECORD_T].data, shared_handshake_key_compat.w, peer->key->key.u32, peer_handshake_key->u32, NULL);
+		valid = fastd_hmacsha256_blocks_verify(handshake->records[RECORD_HANDSHAKE_TAG].data, shared_handshake_key_compat.w, peer->key->key.u32, peer_handshake_key->u32, NULL);
 	}
 
 	if (!valid) {
@@ -395,7 +381,7 @@ static void finish_handshake(fastd_socket_t *sock, const fastd_peer_address_t *l
 	else {
 		fastd_sha256_t hmacbuf;
 		fastd_hmacsha256_blocks(&hmacbuf, shared_handshake_key_compat.w, conf.protocol_config->key.public.u32, handshake_key->key.public.u32, NULL);
-		fastd_handshake_add(&buffer, RECORD_T, HASHBYTES, hmacbuf.b);
+		fastd_handshake_add(&buffer, RECORD_HANDSHAKE_TAG, HASHBYTES, hmacbuf.b);
 	}
 
 	fastd_send_handshake(sock, local_addr, remote_addr, peer, buffer.buffer);
@@ -421,7 +407,7 @@ static void handle_finish_handshake(fastd_socket_t *sock, const fastd_peer_addre
 		valid = fastd_hmacsha256_verify(mac, peer->protocol_state->shared_handshake_key.w, handshake->tlv_data, handshake->tlv_len);
 	}
 	else {
-		valid = fastd_hmacsha256_blocks_verify(handshake->records[RECORD_T].data, peer->protocol_state->shared_handshake_key_compat.w, peer->key->key.u32, peer_handshake_key->u32, NULL);
+		valid = fastd_hmacsha256_blocks_verify(handshake->records[RECORD_HANDSHAKE_TAG].data, peer->protocol_state->shared_handshake_key_compat.w, peer->key->key.u32, peer_handshake_key->u32, NULL);
 	}
 
 	if (!valid) {
@@ -568,7 +554,7 @@ static fastd_peer_t * add_dynamic(fastd_socket_t *sock, const fastd_peer_address
 	memcpy(&peer_key.key, key, PUBLICKEYBYTES);
 
 	if (!ecc_25519_load_packed(&peer_key.unpacked, &peer_key.key.int256)
-		|| !fastd_protocol_ec25519_fhmqvc_check_key(&peer_key.unpacked)) {
+		|| ecc_25519_is_identity(&peer_key.unpacked)) {
 		pr_debug("ignoring handshake from %I (invalid key)", addr);
 		return NULL;
 	}
@@ -726,7 +712,7 @@ void fastd_protocol_ec25519_fhmqvc_handshake_handle(fastd_socket_t *sock, const 
 	}
 
 	if (!secure_handshake(handshake)) {
-		if (conf.secure_handshakes || !has_field(handshake, RECORD_T, HASHBYTES)) {
+		if (conf.secure_handshakes || !has_field(handshake, RECORD_HANDSHAKE_TAG, HASHBYTES)) {
 			pr_debug("received handshake reply without HMAC from %P[%I]", peer, remote_addr);
 			return;
 		}

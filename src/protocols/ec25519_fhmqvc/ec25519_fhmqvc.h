@@ -121,7 +121,6 @@ fastd_peer_t * fastd_protocol_ec25519_fhmqvc_find_peer(const fastd_protocol_key_
 
 void fastd_protocol_ec25519_fhmqvc_generate_key(void);
 void fastd_protocol_ec25519_fhmqvc_show_key(void);
-bool fastd_protocol_ec25519_fhmqvc_check_key(const ecc_25519_work_t *key);
 
 void fastd_protocol_ec25519_fhmqvc_set_shell_env(fastd_shell_env_t *env, const fastd_peer_t *peer);
 bool fastd_protocol_ec25519_fhmqvc_describe_peer(const fastd_peer_t *peer, char *buf, size_t len);
@@ -137,4 +136,27 @@ static inline void hexdump(char out[65], const unsigned char d[32]) {
 /** Checks if a session is currently valid */
 static inline bool is_session_valid(const protocol_session_t *session) {
 	return (session->method && session->method->provider->session_is_valid(session->method_state));
+}
+
+
+/** Divides a secret key by 8 (for some optimizations) */
+static inline bool divide_key(ecc_int256_t *key) {
+	uint8_t c = 0, c2;
+	ssize_t i;
+
+	for (i = 31; i >= 0; i--) {
+		c2 = key->p[i] << 5;
+		key->p[i] = (key->p[i] >> 3) | c;
+		c = c2;
+	}
+
+	return (c == 0);
+}
+
+/** Multiplies a point by 8 */
+static inline void octuple_point(ecc_25519_work_t *p) {
+	ecc_25519_work_t work;
+	ecc_25519_double(&work, p);
+	ecc_25519_double(&work, &work);
+	ecc_25519_double(p, &work);
 }
