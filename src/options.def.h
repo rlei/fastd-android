@@ -40,6 +40,7 @@ SEPARATOR;
 
 #ifdef __ANDROID__
 OPTION(option_android_tun, "--android-tun", "Read TUN handle from Android's LocalServerSocket");
+SEPARATOR;
 #endif
 
 #ifdef WITH_CMDLINE_COMMANDS
