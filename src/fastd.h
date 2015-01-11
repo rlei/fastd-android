@@ -300,6 +300,10 @@ struct fastd_context {
 
 	int tunfd;				/**< The file descriptor of the tunnel interface */
 
+#ifdef __ANDROID__
+	int android_ctrl_sock_fd;		/**< The unix domain socket for communicating with Android GUI */
+#endif
+
 	size_t n_socks;				/**< The number of sockets in socks */
 	fastd_socket_t *socks;			/**< Array of all sockets */
 
@@ -342,8 +346,9 @@ void fastd_socket_close(fastd_socket_t *sock);
 void fastd_socket_error(fastd_socket_t *sock);
 
 #ifdef __ANDROID__
-int receive_android_tunfd(void);
-bool fastd_socket_android_protect(fastd_socket_t *sock);
+int fastd_android_receive_tunfd(void);
+void fastd_android_send_pid(void);
+bool fastd_android_protect_socket(int fd);
 #endif
 
 void fastd_resolve_peer(fastd_peer_t *peer, fastd_remote_t *remote);

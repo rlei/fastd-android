@@ -14,6 +14,7 @@ endif(ANDROID)
 
 pkg_check_modules(UECC REQUIRED libuecc>=3)
 
+
 set(NACL_INCLUDE_DIRS "")
 set(NACL_CFLAGS_OTHER "")
 set(NACL_LIBRARY_DIRS "")
@@ -63,6 +64,7 @@ else(WITH_CAPABILITIES)
   set(CAP_INCLUDE_DIR "")
   set(CAP_LIBRARY "")
 endif(WITH_CAPABILITIES)
+
 if(WITH_STATUS_SOCKET)
   pkg_check_modules(JSONC REQUIRED json-c)
 else(WITH_STATUS_SOCKET)

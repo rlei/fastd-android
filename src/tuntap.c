@@ -59,37 +59,15 @@ static const bool multiaf_tun = false;
 static const bool multiaf_tun = true;
 #endif
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__linux__)
 
-/** Opens the TUN/TAP device */
-void fastd_tuntap_open(void) {
-	pr_debug("initializing tun device...");
-
-	if (conf.mode != MODE_TUN) {
-		exit_error("Android supports only TUN mode");
-	}
-	if (conf.android_tun) {
-		pr_debug("using android TUN fd");
-		ctx.tunfd = receive_android_tunfd();
-	} else if ((ctx.tunfd = open("/dev/tun", O_RDWR|O_NONBLOCK)) < 0) {
-		/* requires root on Android */
-		exit_errno("could not open tun/tap device file");
-	}
-
-	fastd_poll_set_fd_tuntap();
-
-	pr_debug("tun device initialized.");
-}
-
-#elif defined(__linux__)
-
-/** Opens the TUN/TAP device */
-void fastd_tuntap_open(void) {
+/** Opens the TUN/TAP device helper shared by Android and Linux targets */
+void fastd_tuntap_open_linux(const char * dev_name) {
 	pr_debug("initializing tun/tap device...");
 
 	struct ifreq ifr = {};
 
-	if ((ctx.tunfd = open("/dev/net/tun", O_RDWR|O_NONBLOCK)) < 0)
+	if ((ctx.tunfd = open(dev_name, O_RDWR|O_NONBLOCK)) < 0)
 		exit_errno("could not open tun/tap device file");
 
 	if (conf.ifname)
@@ -133,6 +111,41 @@ void fastd_tuntap_open(void) {
 	fastd_poll_set_fd_tuntap();
 
 	pr_debug("tun/tap device initialized.");
+}
+
+#endif
+
+#if defined(__ANDROID__)
+
+/** Opens the TUN/TAP device */
+void fastd_tuntap_open(void) {
+	pr_debug("initializing tun device...");
+
+	if (conf.android_tun) {
+		if (conf.mode != MODE_TUN) {
+			exit_error("Non root Android supports only TUN mode");
+		}
+
+		pr_debug("using android TUN fd");
+		ctx.tunfd = fastd_android_receive_tunfd();
+
+        fastd_android_send_pid();
+
+		fastd_poll_set_fd_tuntap();
+
+		pr_debug("tun device initialized.");
+	} else {
+		/* this requires root on Android */
+		fastd_tuntap_open_linux("/dev/tun");
+	}
+
+}
+
+#elif defined(__linux__)
+
+/** Opens the TUN/TAP device */
+void fastd_tuntap_open(void) {
+	fastd_tuntap_open_linux("/dev/net/tun");
 }
 
 #elif defined(__FreeBSD__) || defined(__OpenBSD__)

@@ -31,6 +31,15 @@
  *   http://www.normalesup.org/~george/comp/libancillary/
  * with minor indent/style adjusts to fit fastd project
  */
+/* vim: set noexpandtab ts=8 sw=8 sts=8 */
+
+/**
+   \file
+
+   Android specific methods for communicating with GUI
+*/
+
+#ifdef __ANDROID__
 
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -39,12 +48,14 @@
 
 #include "fastd.h"
 
+/** declare a work buffer for sending/receiving \e n handles */
 #define ANCIL_FD_BUFFER(n) \
 	struct { \
 		struct cmsghdr h; \
 		int fd[n]; \
 	}
 
+/** receive \e n_fds handles from unix domain socket \e sock and store in \e fds  */
 static int ancil_recv_fds_with_buffer(int sock, int *fds, unsigned n_fds, void *buffer) {
 	struct msghdr msghdr;
 	char nothing;
@@ -79,12 +90,14 @@ static int ancil_recv_fds_with_buffer(int sock, int *fds, unsigned n_fds, void *
 	return n_fds;
 }
 
+/** shortcut for receiving only one \e fd from \e sock */
 static int ancil_recv_fd(int sock, int *fd) {
 	ANCIL_FD_BUFFER(1) buffer;
 
 	return ancil_recv_fds_with_buffer(sock, fd, 1, &buffer) == 1 ? 0 : -1;
 }
 
+/** send \e n_fds handles in \e fds to unix domain socket \e sock */
 static int ancil_send_fds_with_buffer(int sock, const int *fds, unsigned n_fds, void *buffer) {
 	struct msghdr msghdr;
 	char nothing = '!';
@@ -111,6 +124,7 @@ static int ancil_send_fds_with_buffer(int sock, const int *fds, unsigned n_fds, 
 	return sendmsg(sock, &msghdr, 0) >= 0 ? 0 : -1;
 }
 
+/** shortcut for sending only one \e fd to \e sock */
 static int ancil_send_fd(int sock, int fd)
 {
 	ANCIL_FD_BUFFER(1) buffer;
@@ -122,71 +136,77 @@ static int ancil_send_fd(int sock, int fd)
  * libancillary end
  */
 
-static int android_ctrl_sock;
 
-#define PROTECT_ACK_OK 'X'
-#define PROTECT_ACK_ERROR 'E'
+/** name of unix domain socket for communication with Android FastdVpnService */
+#define CTRL_SOCK_NAME "fastd_tun_sock"
 
-static void init_ctrl_sock() {
+/** message sent by Android FastdVpnService to indicate successful protection of socket */
+#define PROTECT_OK 'X'
+
+/** message sent by Android FastdVpnService when protecting socket failed */
+#define PROTECT_ERROR 'E'
+
+/** establish the unix domain socket with Android GUI */
+static void init_ctrl_sock(void) {
 	/* Must keep consistent with FastdVpnService */
-	const char *sockname = "fastd_tun_sock";
 	struct sockaddr_un addr;
 
-	if ((android_ctrl_sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+	if ((ctx.android_ctrl_sock_fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
 		exit_errno("could not create unix domain socket");
 	}
 
 	memset(&addr, 0, sizeof(addr));
 	addr.sun_family = AF_UNIX;
 	addr.sun_path[0] = 0;     /* Linux's abstract unix domain socket name */
-	strncpy(addr.sun_path + 1, sockname, sizeof(addr.sun_path) - 2);
-	int socklen = offsetof(struct sockaddr_un, sun_path) + strlen(sockname) + 1;
+	strncpy(addr.sun_path + 1, CTRL_SOCK_NAME, sizeof(addr.sun_path) - 2);
+	int socklen = offsetof(struct sockaddr_un, sun_path) + strlen(CTRL_SOCK_NAME) + 1;
 
-	if (connect(android_ctrl_sock, (struct sockaddr*)&addr, socklen) == -1) {
+	if (connect(ctx.android_ctrl_sock_fd, (struct sockaddr*)&addr, socklen) == -1) {
 		exit_errno("could not connect to Android LocalServerSocket");
 	}
 }
 
-int receive_android_tunfd(void) {
-	if (!android_ctrl_sock) {
-		init_ctrl_sock();
-	}
+/** receive TUN fd from Android GUI; this is the only way to open TUN device on non-rooted Android */
+int fastd_android_receive_tunfd(void) {
+	init_ctrl_sock();
 
 	int handle;
-	if (ancil_recv_fd(android_ctrl_sock, &handle)) {
+	if (ancil_recv_fd(ctx.android_ctrl_sock_fd, &handle)) {
 		exit_errno("could not receive TUN handle from Android");
 	} else {
 		pr_debug("received fd: %u", handle);
 	}
 
-	/* quick hack for now: sending back pid (instead of writing to pid file) */
-	char pid[20];
-	snprintf(pid, sizeof(pid), "%u", (unsigned)getpid());
-	if (write(android_ctrl_sock, pid, strlen(pid)) != strlen(pid)) {
-		pr_error_errno("send pid");
-	}
-
 	return handle;
 }
 
-bool fastd_socket_android_protect(fastd_socket_t * sock) {
+/** send fastd pid to Android GUI for later signal sending (HUP, TERM etc) */
+void fastd_android_send_pid(void) {
+	char pid[20];
+	snprintf(pid, sizeof(pid), "%u", (unsigned)getpid());
+	if (write(ctx.android_ctrl_sock_fd, pid, strlen(pid)) != strlen(pid)) {
+		exit_errno("send pid");
+	}
+}
+
+/** report \e fd to Android GUI to be protected (i.e. not to be routed via TUN) */
+bool fastd_android_protect_socket(int fd) {
 	if (!conf.android_tun) {
-        /* standalone (non GUI) mode */
+		/* rooted/non-GUI mode */
 		return true;
 	}
 
-	if (!android_ctrl_sock) {
-		init_ctrl_sock();
-	}
-
 	pr_debug("sending fd to protect");
-	ancil_send_fd(android_ctrl_sock, sock->fd);
+	if (ancil_send_fd(ctx.android_ctrl_sock_fd, fd) == -1) {
+		exit_errno("could not send handle to Android for protecting");
+        }
 
 	char buf[20];
-	if (read(android_ctrl_sock, buf, sizeof(buf)) == -1) {
-		pr_error_errno("read ack");
-		return false;
+	if (read(ctx.android_ctrl_sock_fd, buf, sizeof(buf)) == -1) {
+		exit_errno("read ack");
 	}
-	return buf[0] == PROTECT_ACK_OK;
+	return buf[0] == PROTECT_OK;
 }
+
+#endif /* __ANDROID__ */
 
