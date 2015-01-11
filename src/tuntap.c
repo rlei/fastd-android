@@ -2,6 +2,10 @@
   Copyright (c) 2012-2014, Matthias Schiffer <mschiffer@universe-factory.net>
   All rights reserved.
 
+  Android port contributor:
+  Copyright (c) 2014-2015, Haofeng "Rick" Lei <ricklei@gmail.com>
+  All rights reserved.
+
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are met:
 
@@ -59,10 +63,10 @@ static const bool multiaf_tun = false;
 static const bool multiaf_tun = true;
 #endif
 
-#if defined(__ANDROID__) || defined(__linux__)
+#ifdef __linux__
 
 /** Opens the TUN/TAP device helper shared by Android and Linux targets */
-void fastd_tuntap_open_linux(const char * dev_name) {
+static void tuntap_open_linux(const char * dev_name) {
 	pr_debug("initializing tun/tap device...");
 
 	struct ifreq ifr = {};
@@ -136,16 +140,15 @@ void fastd_tuntap_open(void) {
 		pr_debug("tun device initialized.");
 	} else {
 		/* this requires root on Android */
-		fastd_tuntap_open_linux("/dev/tun");
+		tuntap_open_linux("/dev/tun");
 	}
-
 }
 
 #elif defined(__linux__)
 
 /** Opens the TUN/TAP device */
 void fastd_tuntap_open(void) {
-	fastd_tuntap_open_linux("/dev/net/tun");
+	tuntap_open_linux("/dev/net/tun");
 }
 
 #elif defined(__FreeBSD__) || defined(__OpenBSD__)
