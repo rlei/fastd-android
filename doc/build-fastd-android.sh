@@ -1,11 +1,17 @@
 # Helper script for building fastd-android and its dependencies
-# https://github.com/rlei/fastd-android
 #!/bin/bash
+
+if [ x${PWD##*/} == xdoc ]; then
+    echo "Warning: it seems you're currently in the doc/ folder. This script needs to run under the top folder of fastd source code."
+    echo "See README-Android.md for more info."
+    exit 1
+fi
 
 echo "This script downloads and builds dependencies for fastd-android, as well as fastd-android itself."
 echo "Make sure you have these packages installed:"
 echo "  * Android NDK r10d or newer"
 echo "  * for Debian/Ubuntu: sudo apt-get install curl build-eseentials automake bison cmake git libtool pkg-config"
+echo "    - Ubuntu 12.04 users need to grab cmake 2.8.9 or newer. See README-Android.md for more info."
 echo "  * for Mac OS X: brew install automake libtool cmake bison"
 echo "Hit ctrl-c now if you don't have all needed stuff yet."
 read
@@ -25,7 +31,7 @@ if [ ! -d "build" ]; then
 fi
 
 pushd build > /dev/null
-WORK_DIR=`pwd`
+WORK_DIR=${PWD}
 
 if [ -d "${LIBSODIUM_PATH}" ]; then
     echo "It seems you already have libsodium downloaded.";
