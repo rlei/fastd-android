@@ -629,15 +629,8 @@ static void configure_peers(void) {
 
 		peer->config_state = CONFIG_STATIC;
 
-#ifdef __ANDROID__
-		/* When network connectivity changes, Android GUI sends SIGHUP to fastd.
-		 * Peer socket must be recreated in this case.
-		 */
-		fastd_peer_reset(peer);
-#else
 		if (!fastd_peer_is_established(peer))
 			fastd_peer_reset(peer);
-#endif
 	}
 }
 
