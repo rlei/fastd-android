@@ -42,6 +42,11 @@
 
 /** Adds packet info to ancillary control messages */
 static inline void add_pktinfo(struct msghdr *msg, const fastd_peer_address_t *local_addr) {
+#ifdef __ANDROID__
+	/* PKTINFO will mess with Android VpnService.protect(socket) */
+	if (conf.android_integration)
+		return;
+#endif
 	if (!local_addr)
 		return;
 

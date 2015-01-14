@@ -121,6 +121,7 @@ struct fastd_peer_group {
 
 	/* constraints */
 	int max_connections;				/**< The maximum number of connections to allow in this group; -1 for no limit */
+	fastd_string_stack_t *methods;			/**< The list of configured method names */
 };
 
 /** An entry for a MAC address seen at another peer */
@@ -265,6 +266,20 @@ static inline bool fastd_peer_is_socket_dynamic(const fastd_peer_t *peer) {
 	return (!peer->sock || !peer->sock->addr);
 }
 
+/** Returns the configured methods for a peer's group */
+static inline const fastd_string_stack_t * fastd_peer_get_methods(const fastd_peer_t *peer) {
+	if (!peer)
+		return conf.peer_group->methods;
+
+	const fastd_peer_group_t *group;
+	for (group = peer->group; group; group = group->parent) {
+		if (group->methods)
+			return group->methods;
+	}
+
+	return NULL;
+}
+
 /** Checks if a MAC address is a normal unicast address */
 static inline bool fastd_eth_addr_is_unicast(fastd_eth_addr_t addr) {
 	return ((addr.data[0] & 1) == 0);
@@ -275,6 +290,7 @@ bool fastd_peer_find_by_eth_addr(const fastd_eth_addr_t addr, fastd_peer_t **pee
 
 void fastd_peer_handle_handshake_queue(void);
 void fastd_peer_maintenance(void);
+void fastd_peer_reset_all(void);
 
 /** Adds statistics for a single packet of a given size */
 static inline void fastd_stats_add(UNUSED fastd_peer_t *peer, UNUSED fastd_stat_type_t stat, UNUSED size_t bytes) {

@@ -125,7 +125,7 @@ static void tuntap_open_linux(const char * dev_name) {
 void fastd_tuntap_open(void) {
 	pr_debug("initializing tun device...");
 
-	if (conf.android_tun) {
+	if (conf.android_integration) {
 		if (conf.mode != MODE_TUN) {
 			exit_error("Non root Android supports only TUN mode");
 		}

@@ -244,7 +244,7 @@ struct fastd_config {
 #endif
 
 #ifdef __ANDROID__
-	bool android_tun;			/**< TUN fd to be passed from Android UI */
+	bool android_integration;		/**< Enable Android GUI integration features */
 #endif
 
 	bool daemon;				/**< Set to make fastd fork to the background after initialization */
@@ -466,6 +466,18 @@ static inline fastd_string_stack_t * fastd_string_stack_push(fastd_string_stack_
 /** Gets the head of string stack (or NULL if the stack is NULL) */
 static inline const char * fastd_string_stack_get(const fastd_string_stack_t *stack) {
 	return stack ? stack->str : NULL;
+}
+
+/**  */
+static inline bool fastd_string_stack_contains(const fastd_string_stack_t *stack, const char *str) {
+	while (stack) {
+		if (strcmp(stack->str, str) == 0)
+			return true;
+
+		stack = stack->next;
+	}
+
+	return false;
 }
 
 /** Frees a whole string stack */

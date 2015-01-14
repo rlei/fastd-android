@@ -319,7 +319,7 @@ static void option_protocol(const char *arg) {
 
 /** Handles the --method option */
 static void option_method(const char *arg) {
-	fastd_config_method(arg);
+	fastd_config_method(conf.peer_group, arg);
 }
 
 /** Handles the --forward option */
@@ -330,9 +330,9 @@ static void option_forward(void) {
 #endif
 
 #ifdef __ANDROID__
-/** Handles the --android-tun option */
-static void option_android_tun(void) {
-	conf.android_tun = true;
+/** Handles the --android-integration option */
+static void option_android_integration(void) {
+	conf.android_integration = true;
 }
 #endif
 

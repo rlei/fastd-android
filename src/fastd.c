@@ -68,26 +68,31 @@
 fastd_context_t ctx = {};
 
 
-static volatile bool sighup = false;		/**< Is set to true when a SIGHUP is received */
-static volatile bool terminate = false;		/**< Is set to true when a SIGTERM, SIGQUIT or SIGINT is received */
-static volatile bool sigchld = false;		/**< Is set to true when a SIGCHLD is received */
+static volatile bool sig_reload = false;	/**< Is set to true when a SIGHUP is received */
+static volatile bool sig_reset = false;		/**< Is set to true when a SIGUSR2 is received */
+static volatile bool sig_terminate = false;	/**< Is set to true when a SIGTERM, SIGQUIT or SIGINT is received */
+static volatile bool sig_child = false;		/**< Is set to true when a SIGCHLD is received */
 
 
 /** Signal handler; just saves the signals to be handled later */
 static void on_signal(int signo) {
 	switch(signo) {
 	case SIGHUP:
-		sighup = true;
+		sig_reload = true;
+		break;
+
+	case SIGUSR2:
+		sig_reset = true;
 		break;
 
 	case SIGCHLD:
-		sigchld = true;
+		sig_child = true;
 		break;
 
 	case SIGTERM:
 	case SIGQUIT:
 	case SIGINT:
-		terminate = true;
+		sig_terminate = true;
 		break;
 
 	default:
@@ -113,6 +118,8 @@ static void init_signals(void) {
 	action.sa_handler = on_signal;
 	if (sigaction(SIGHUP, &action, NULL))
 		exit_errno("sigaction");
+	if (sigaction(SIGUSR2, &action, NULL))
+		exit_errno("sigaction");
 	if (sigaction(SIGCHLD, &action, NULL))
 		exit_errno("sigaction");
 	if (sigaction(SIGTERM, &action, NULL))
@@ -130,8 +137,6 @@ static void init_signals(void) {
 	if (sigaction(SIGTTOU, &action, NULL))
 		exit_errno("sigaction");
 	if (sigaction(SIGUSR1, &action, NULL))
-		exit_errno("sigaction");
-	if (sigaction(SIGUSR2, &action, NULL))
 		exit_errno("sigaction");
 
 }
@@ -246,8 +251,11 @@ static inline void write_pid(void) {
 		return;
 
 #ifdef __ANDROID__
-	pr_warn("fastd doesn't support pid file on Android");
-#else
+	if (conf.android_integration) {
+		pr_warn("fastd doesn't support pid file in GUI integration mode on Android");
+		return;
+	}
+#endif
 	uid_t uid = geteuid();
 	gid_t gid = getegid();
 
@@ -258,24 +266,23 @@ static inline void write_pid(void) {
 			pr_debug_errno("seteuid");
 	}
 
-	int fd = open(conf.pid_file, O_WRONLY|O_CREAT|O_TRUNC, 0666);
-	if (fd < 0) {
-		pr_error_errno("can't write PID file: open");
+	FILE *f = fopen(conf.pid_file, "w");
+	if (f == NULL) {
+		pr_error_errno("can't write PID file: fopen");
 		goto end;
 	}
 
-	if (dprintf(fd, "%u", (unsigned)getpid()) < 0)
-		pr_error_errno("can't write PID file: dprintf");
+	if (fprintf(f, "%u", (unsigned)getpid()) < 0)
+		pr_error_errno("can't write PID file: fprintf");
 
-	if (close(fd) < 0)
-		pr_warn_errno("close");
+	if (fclose(f) < 0)
+		pr_warn_errno("fclose");
 
  end:
 	if (seteuid(uid) < 0)
 		pr_debug_errno("seteuid");
 	if (setegid(gid) < 0)
 		pr_debug_errno("setegid");
-#endif
 }
 
 /** Switches to the configured user */
@@ -571,16 +578,24 @@ static inline void reap_zombies(void) {
 
 /** The \em real signal handlers */
 static inline void handle_signals(void) {
-	if (sighup) {
-		sighup = false;
+	if (sig_reload) {
+		sig_reload = false;
 
 		pr_info("reconfigure triggered");
 
 		fastd_config_load_peer_dirs();
 	}
 
-	if (sigchld) {
-		sigchld = false;
+	if (sig_reset) {
+		sig_reset = false;
+
+		pr_info("triggered reset of all connections");
+
+		fastd_peer_reset_all();
+	}
+
+	if (sig_child) {
+		sig_child = false;
 		reap_zombies();
 	}
 }
@@ -648,7 +663,7 @@ static inline void cleanup(void) {
 int main(int argc, char *argv[]) {
 	init(argc, argv);
 
-	while (!terminate)
+	while (!sig_terminate)
 		run();
 
 	cleanup();

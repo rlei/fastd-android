@@ -197,7 +197,7 @@ void fastd_android_send_pid(void) {
 
 /** report \e fd to Android GUI to be protected (i.e. not to be routed via TUN) */
 bool fastd_android_protect_socket(int fd) {
-	if (!conf.android_tun) {
+	if (!conf.android_integration) {
 		/* rooted/non-GUI mode */
 		return true;
 	}

@@ -39,7 +39,7 @@ SEPARATOR;
 #endif
 
 #ifdef __ANDROID__
-OPTION(option_android_tun, "--android-tun", "Read TUN handle from Android's LocalServerSocket");
+OPTION(option_android_integration, "--android-integration", "Enable integration with Android GUI");
 SEPARATOR;
 #endif
 
