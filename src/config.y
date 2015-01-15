@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2012-2014, Matthias Schiffer <mschiffer@universe-factory.net>
+  Copyright (c) 2012-2015, Matthias Schiffer <mschiffer@universe-factory.net>
   All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
@@ -213,13 +213,23 @@ peer_group_statement:
 	;
 
 user:		TOK_STRING {
+#ifdef USE_USER
 			free(conf.user);
 			conf.user = fastd_strdup($1->str);
+#else
+			fastd_config_error(&@$, state, "user setting is not supported on this platform");
+			YYERROR;
+#endif
 		}
 
 group:		TOK_STRING {
+#ifdef USE_USER
 			free(conf.group);
 			conf.group = fastd_strdup($1->str);
+#else
+			fastd_config_error(&@$, state, "group setting is not supported on this platform");
+			YYERROR;
+#endif
 		}
 
 drop_capabilities:

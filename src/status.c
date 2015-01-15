@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2012-2014, Matthias Schiffer <mschiffer@universe-factory.net>
+  Copyright (c) 2012-2015, Matthias Schiffer <mschiffer@universe-factory.net>
   All rights reserved.
 
   Redistribution and use in source and binary forms, with or without
@@ -203,6 +203,7 @@ void fastd_status_init(void) {
 		return;
 	}
 
+#ifdef USE_USER
 	uid_t uid = geteuid();
 	gid_t gid = getegid();
 
@@ -212,7 +213,7 @@ void fastd_status_init(void) {
 		if (seteuid(conf.uid) < 0)
 			pr_debug_errno("seteuid");
 	}
-
+#endif
 
 	ctx.status_fd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (ctx.status_fd < 0)
@@ -242,10 +243,12 @@ void fastd_status_init(void) {
 		exit_errno("fastd_status_init: listen");
 
 
+#ifdef USE_USER
 	if (seteuid(uid) < 0)
 		pr_debug_errno("seteuid");
 	if (setegid(gid) < 0)
 		pr_debug_errno("setegid");
+#endif
 }
 
 /** Closes the status socket */
