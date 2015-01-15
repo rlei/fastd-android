@@ -2,6 +2,7 @@ fastd for Android
 =================
 Android port of [fastd](https://projects.universe-factory.net/projects/fastd/wiki).
 
+Current (2015-01-15) Android patchset [has been merged](http://git.universe-factory.net/fastd/commit/?id=c4378784ae2caec57634f9f04bcb3dcddc673f36) into [fastd master](http://git.universe-factory.net/fastd/). Future Android related development will continue to be hosted here, before being merged into fastd.
 
 Runtime Requirements
 --------------------
