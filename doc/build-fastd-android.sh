@@ -136,11 +136,11 @@ for ARCH in arm x86; do
             ${ANDROID_CMAKE} \
             -DANDROID_ABI="$_USE_ABI" ${CMAKE_COMMON_DEFS} \
             ${FASTD_ANDROID_DEFS} \
-            ${ADD_DEFS} -DEXECUTABLE_OUTPUT_PATH=`pwd` \
+            ${ADD_DEFS} -DEXECUTABLE_OUTPUT_PATH=`pwd`/src -DCMAKE_INSTALL_PREFIX=`pwd` \
             ../.. || exit 7
     fi
 
-    make && echo ">> fastd ${ARCH} build ready in build/${BUILD_DIR}"
+    make install/strip && echo ">> fastd ${ARCH} build ready in build/${BUILD_DIR}/bin"
     popd > /dev/null
 done
 
