@@ -21,6 +21,8 @@ UECC_VER=4
 LIBSODIUM_PATH=libsodium-${SODIUM_VER}
 LIBUECC_PATH=libuecc-${UECC_VER}
 ANDROID_NATIVE_LEVEL=16
+ARM_TOOLCHAIN=arm-linux-androideabi-4.9
+X86_TOOLCHAIN=x86-4.9
 
 if [ x$ANDROID_NDK_HOME == x ]; then
     echo "Set ANDROID_NDK_HOME first"; exit 1;
@@ -44,16 +46,17 @@ pushd ${LIBSODIUM_PATH} > /dev/null
 if [ ! -f "dist-build/android-armv7.sh" ]; then
     echo "Patching libsodium build scripts..."
     sed -i.bak 's/--enable-minimal//' dist-build/android-build.sh
+    sed -i "" 's/--arch=/--toolchain="$NDK_TOOLCHAIN" --arch=/' dist-build/android-build.sh
     sed -e 's/-mthumb -marm -march=armv6/-march=armv7-a -mfloat-abi=softfp -mfpu=vfpv3-d16/' dist-build/android-arm.sh > dist-build/android-armv7.sh
     chmod +x dist-build/android-armv7.sh
 fi
 if [ ! -d "libsodium-android-arm" ]; then
-    dist-build/android-armv7.sh || exit 2
+    NDK_PLATFORM=android-${ANDROID_NATIVE_LEVEL} NDK_TOOLCHAIN=${ARM_TOOLCHAIN} dist-build/android-armv7.sh || exit 2
     # for static link using cmake
     rm libsodium-android-arm/lib/libsodium.so
 fi
 if [ ! -d "libsodium-android-x86" ]; then
-    dist-build/android-x86.sh || exit 2
+    NDK_PLATFORM=android-${ANDROID_NATIVE_LEVEL} NDK_TOOLCHAIN=${X86_TOOLCHAIN} dist-build/android-x86.sh || exit 2
     # for static link using cmake
     rm libsodium-android-x86/lib/libsodium.so
 fi
