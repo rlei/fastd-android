@@ -49,6 +49,10 @@
 #endif
 
 
+/** Provides the proper arguments for passing a key for the %H log format */
+#define KEY_PRINT(k) (const uint8_t *)(k), (size_t)PUBLICKEYBYTES
+
+
 /** Derives a key of arbitraty length from the shared key material after a handshake using the HKDF algorithm */
 static void derive_key(fastd_sha256_t *out, size_t blocks, const uint32_t *salt, const char *method_name,
 		       const aligned_int256_t *A, const aligned_int256_t *B, const aligned_int256_t *X, const aligned_int256_t *Y,
@@ -224,14 +228,14 @@ static bool make_shared_handshake_key(bool initiator, const keypair_t *handshake
 		ecc_25519_gf_mult(&da, &d, &conf.protocol_config->key.secret);
 		ecc_25519_gf_add(&s, &da, &handshake_key->secret);
 
-		ecc_25519_scalarmult(&work, &e, &peer_key->unpacked);
+		ecc_25519_scalarmult_bits(&work, &e, &peer_key->unpacked, 128);
 	}
 	else {
 		ecc_int256_t eb;
 		ecc_25519_gf_mult(&eb, &e, &conf.protocol_config->key.secret);
 		ecc_25519_gf_add(&s, &eb, &handshake_key->secret);
 
-		ecc_25519_scalarmult(&work, &d, &peer_key->unpacked);
+		ecc_25519_scalarmult_bits(&work, &d, &peer_key->unpacked, 128);
 	}
 
 	ecc_25519_add(&work, &workXY, &work);
@@ -512,10 +516,7 @@ void fastd_protocol_ec25519_fhmqvc_handshake_init(fastd_socket_t *sock, const fa
 
 /** Prints a message when a handshake from an unknown peer is received */
 static inline void print_unknown_key(const fastd_peer_address_t *addr, const unsigned char key[PUBLICKEYBYTES]) {
-	char buf[65];
-	hexdump(buf, key);
-
-	pr_verbose("ignoring handshake from %I (unknown key %s)", addr, buf);
+	pr_verbose("ignoring handshake from %I (unknown key %H)", addr, KEY_PRINT(key));
 }
 
 
@@ -546,7 +547,7 @@ static fastd_peer_t * add_dynamic(fastd_socket_t *sock, const fastd_peer_address
 	}
 
 	if (find_key(key, NULL)) {
-		pr_debug("ignoring handshake from %I (disabled key)", addr);
+		pr_debug("ignoring handshake from %I (disabled key %H)", addr, KEY_PRINT(key));
 		return NULL;
 	}
 
@@ -627,7 +628,7 @@ static inline fastd_peer_t * add_dynamic(UNUSED fastd_socket_t *sock, const fast
 
 /** Handles a received handshake packet */
 void fastd_protocol_ec25519_fhmqvc_handshake_handle(fastd_socket_t *sock, const fastd_peer_address_t *local_addr, const fastd_peer_address_t *remote_addr,
-						    fastd_peer_t *peer, const fastd_handshake_t *handshake, const fastd_method_info_t *method) {
+						    fastd_peer_t *peer, const fastd_handshake_t *handshake) {
 	fastd_protocol_ec25519_fhmqvc_maintenance();
 
 	if (!has_field(handshake, RECORD_SENDER_KEY, PUBLICKEYBYTES)) {
@@ -639,7 +640,7 @@ void fastd_protocol_ec25519_fhmqvc_handshake_handle(fastd_socket_t *sock, const 
 	if (!peer) {
 		switch (errno) {
 		case EPERM:
-			pr_debug("ignoring handshake from %I (incorrect source address)", remote_addr);
+			pr_debug("ignoring handshake from %I with key %H (incorrect source address)", remote_addr, KEY_PRINT(handshake->records[RECORD_SENDER_KEY].data));
 			return;
 
 		case ENOENT:
@@ -676,6 +677,8 @@ void fastd_protocol_ec25519_fhmqvc_handshake_handle(fastd_socket_t *sock, const 
 		}
 	}
 
+	const fastd_method_info_t *method = fastd_handshake_get_method(peer, handshake);
+
 #ifdef WITH_DYNAMIC_PEERS
 	if (fastd_peer_is_dynamic(peer)) {
 		if (!handle_dynamic(sock, local_addr, remote_addr, peer, handshake, method))
@@ -698,6 +701,11 @@ void fastd_protocol_ec25519_fhmqvc_handshake_handle(fastd_socket_t *sock, const 
 		peer->last_handshake_response_timeout = ctx.now + MIN_HANDSHAKE_INTERVAL;
 		peer->last_handshake_response_address = *remote_addr;
 		respond_handshake(sock, local_addr, remote_addr, peer, &peer_handshake_key, method, handshake->little_endian);
+		return;
+	}
+
+	if (!method) {
+		fastd_handshake_send_error(sock, local_addr, remote_addr, peer, handshake, REPLY_UNACCEPTABLE_VALUE, RECORD_METHOD_LIST);
 		return;
 	}
 

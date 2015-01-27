@@ -102,12 +102,10 @@ static int bind_socket(const fastd_bind_address_t *addr, bool warn) {
 #endif
 
 #ifdef USE_PMTU
-	if (conf.pmtu.set) {
-		int pmtu = conf.pmtu.state ? IP_PMTUDISC_DO : IP_PMTUDISC_DONT;
-		if (setsockopt(fd, IPPROTO_IP, IP_MTU_DISCOVER, &pmtu, sizeof(pmtu))) {
-			pr_error_errno("setsockopt: unable to set PMTU discovery");
-			goto error;
-		}
+	int pmtu = IP_PMTUDISC_DONT;
+	if (setsockopt(fd, IPPROTO_IP, IP_MTU_DISCOVER, &pmtu, sizeof(pmtu))) {
+		pr_error_errno("setsockopt: unable to disable PMTU discovery");
+		goto error;
 	}
 #endif
 
@@ -242,12 +240,19 @@ fastd_socket_t * fastd_socket_open(fastd_peer_t *peer, int af) {
 
 	const fastd_bind_address_t *bind_address;
 
-	if (af == AF_INET && conf.bind_addr_default_v4)
+	if (af == AF_INET && conf.bind_addr_default_v4) {
 		bind_address = conf.bind_addr_default_v4;
-	else if (af == AF_INET6 && conf.bind_addr_default_v6)
+	}
+	else if (af == AF_INET6 && conf.bind_addr_default_v6) {
 		bind_address = conf.bind_addr_default_v6;
-	else
+	}
+	else if (!conf.bind_addr_default_v4 && !conf.bind_addr_default_v6) {
 		bind_address = &any_address;
+	}
+	else {
+		pr_debug("not opening an %s socket for peer %P (no bind address with matching address family)", (af == AF_INET6) ? "IPv6" : "IPv4", peer);
+		return NULL;
+	}
 
 	int fd = bind_socket(bind_address, true);
 	if (fd < 0)

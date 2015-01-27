@@ -18,6 +18,7 @@ Release notes
 .. toctree::
    :maxdepth: 2
 
+   releases/v17
    releases/v16
    releases/v15
 
@@ -39,4 +40,5 @@ Developer documentation
 .. toctree::
    :maxdepth: 2
 
+   devel/building
    devel/protocol
