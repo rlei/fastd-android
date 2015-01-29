@@ -78,7 +78,7 @@ struct fastd_protocol {
 	void (*handshake_init)(fastd_socket_t *sock, const fastd_peer_address_t *local_addr, const fastd_peer_address_t *remote_addr, fastd_peer_t *peer);
 
 	/** Handles a handshake for the given peer */
-	void (*handshake_handle)(fastd_socket_t *sock, const fastd_peer_address_t *local_addr, const fastd_peer_address_t *remote_addr, fastd_peer_t *peer, const fastd_handshake_t *handshake, const fastd_method_info_t *method);
+	void (*handshake_handle)(fastd_socket_t *sock, const fastd_peer_address_t *local_addr, const fastd_peer_address_t *remote_addr, fastd_peer_t *peer, const fastd_handshake_t *handshake);
 
 #ifdef WITH_DYNAMIC_PEERS
 	/** Handles an asynchronous on-verify command return */
@@ -199,7 +199,6 @@ struct fastd_config {
 
 	uint32_t packet_mark;			/**< The configured packet mark (or 0) */
 	bool forward;				/**< Specifies if packet forwarding is enable */
-	fastd_tristate_t pmtu;			/**< Can be set to explicitly enable or disable PMTU detection */
 	bool secure_handshakes;			/**< Can be set to false to support connections with fastd versions before v11 */
 
 	fastd_drop_caps_t drop_caps;		/**< Specifies if and when to drop capabilities */
@@ -299,8 +298,8 @@ struct fastd_context {
 	fastd_timeout_t next_maintenance;	/**< The time of the next maintenance call */
 
 	VECTOR(pid_t) async_pids;		/**< PIDs of asynchronously executed commands which still have to be reaped */
-	int async_rfd;				/**< The read side of the pipe used to send data from other thread to the main thread */
-	int async_wfd;				/**< The write side of the pipe used to send data from other thread to the main thread */
+	int async_rfd;				/**< The read side of the pipe used to send data from other threads to the main thread */
+	int async_wfd;				/**< The write side of the pipe used to send data from other threads to the main thread */
 
 	pthread_attr_t detached_thread;		/**< pthread_attr_t for creating detached threads */
 
@@ -320,8 +319,8 @@ struct fastd_context {
 
 	VECTOR(fastd_peer_eth_addr_t) eth_addrs; /**< Sorted vector of all known ethernet addresses with associated peers and timeouts */
 
-	size_t unknown_handshake_pos;		/**< Current start position in the ring buffer unknown_handshakes */
-	fastd_handshake_timeout_t unknown_handshakes[8]; /**< Ring buffer of unknown addresses handshakes have been received from */
+	uint32_t unknown_handshake_seed;	/**< Hash seed for the unknown handshake hashtables */
+	fastd_handshake_timeout_t *unknown_handshakes[UNKNOWN_TABLES]; /**< Hash tables unknown addresses handshakes have been sent to */
 
 	fastd_protocol_state_t *protocol_state;	/**< Protocol-specific state */
 };
@@ -341,6 +340,8 @@ void fastd_send(const fastd_socket_t *sock, const fastd_peer_address_t *local_ad
 void fastd_send_handshake(const fastd_socket_t *sock, const fastd_peer_address_t *local_addr, const fastd_peer_address_t *remote_addr, fastd_peer_t *peer, fastd_buffer_t buffer);
 void fastd_send_data(fastd_buffer_t buffer, fastd_peer_t *source);
 
+void fastd_receive_unknown_init(void);
+void fastd_receive_unknown_free(void);
 void fastd_receive(fastd_socket_t *sock);
 void fastd_handle_receive(fastd_peer_t *peer, fastd_buffer_t buffer, bool reordered);
 
@@ -438,9 +439,12 @@ static inline bool fastd_peer_address_is_v6_ll(const fastd_peer_address_t *addr)
 
 /** Duplicates a string, creating a one-element string stack */
 static inline fastd_string_stack_t * fastd_string_stack_dup(const char *str) {
-	fastd_string_stack_t *ret = fastd_alloc(alignto(sizeof(fastd_string_stack_t) + strlen(str) + 1, 8));
+	size_t str_len = strlen(str);
+	fastd_string_stack_t *ret = fastd_alloc(alignto(sizeof(fastd_string_stack_t) + str_len + 1, 8));
+
 	ret->next = NULL;
-	strcpy(ret->str, str);
+
+	memcpy(ret->str, str, str_len + 1);
 
 	return ret;
 }
@@ -449,8 +453,10 @@ static inline fastd_string_stack_t * fastd_string_stack_dup(const char *str) {
 static inline fastd_string_stack_t * fastd_string_stack_dupn(const char *str, size_t len) {
 	size_t str_len = strnlen(str, len);
 	fastd_string_stack_t *ret = fastd_alloc(alignto(sizeof(fastd_string_stack_t) + str_len + 1, 8));
+
 	ret->next = NULL;
-	strncpy(ret->str, str, str_len);
+
+	memcpy(ret->str, str, str_len);
 	ret->str[str_len] = 0;
 
 	return ret;
@@ -458,9 +464,12 @@ static inline fastd_string_stack_t * fastd_string_stack_dupn(const char *str, si
 
 /** Pushes the copy of a string onto the top of a string stack */
 static inline fastd_string_stack_t * fastd_string_stack_push(fastd_string_stack_t *stack, const char *str) {
-	fastd_string_stack_t *ret = fastd_alloc(alignto(sizeof(fastd_string_stack_t) + strlen(str) + 1, 8));
+	size_t str_len = strlen(str);
+	fastd_string_stack_t *ret = fastd_alloc(alignto(sizeof(fastd_string_stack_t) + str_len + 1, 8));
+
 	ret->next = stack;
-	strcpy(ret->str, str);
+
+	memcpy(ret->str, str, str_len + 1);
 
 	return ret;
 }
@@ -470,7 +479,7 @@ static inline const char * fastd_string_stack_get(const fastd_string_stack_t *st
 	return stack ? stack->str : NULL;
 }
 
-/**  */
+/** Checks if a string is contained in a string stack */
 static inline bool fastd_string_stack_contains(const fastd_string_stack_t *stack, const char *str) {
 	while (stack) {
 		if (strcmp(stack->str, str) == 0)

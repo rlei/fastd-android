@@ -17,7 +17,8 @@ echo "Hit ctrl-c now if you don't have all needed stuff yet."
 read
 
 SODIUM_VER=1.0.1
-UECC_VER=4
+UECC_VER=5
+LIBUECC_DOWNLOAD_ID=80
 LIBSODIUM_PATH=libsodium-${SODIUM_VER}
 LIBUECC_PATH=libuecc-${UECC_VER}
 ANDROID_NATIVE_LEVEL=16
@@ -77,7 +78,7 @@ CMAKE_COMMON_DEFS="-DCMAKE_BUILD_TYPE=Release -DANDROID_NDK=${ANDROID_NDK_HOME} 
 if [ -d "${LIBUECC_PATH}" ]; then
     echo "It seems you already have libuecc downloaded.";
 else
-    curl -k -L https://projects.universe-factory.net/attachments/download/71/libuecc-${UECC_VER}.tar.xz | tar Jxf - || exit 4
+    curl -k -L https://projects.universe-factory.net/attachments/download/${LIBUECC_DOWNLOAD_ID}/libuecc-${UECC_VER}.tar.xz | tar Jxf - || exit 4
 fi
 for ARCH in arm x86; do
     BUILD_DIR=libuecc-${ARCH}
