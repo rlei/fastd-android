@@ -109,8 +109,8 @@ if [ ! -d "pkgconfig" ]; then
 fi
 
 # detect HomeBrew installed bison for OS X
-HOMEBREW_BISON_PATH=`find /usr/local/Cellar/bison -name bin`
-if [ x${HOMEBREW_BISON_PATH} != x ]; then
+HOMEBREW_BISON_PATH="/usr/local/opt/bison/bin"
+if [ -x "${HOMEBREW_BISON_PATH}/bison" ]; then
     USE_PATH=${HOMEBREW_BISON_PATH}:$PATH
 else
     USE_PATH=$PATH
