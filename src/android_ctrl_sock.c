@@ -184,12 +184,15 @@ int fastd_android_receive_tunfd(void) {
 	return handle;
 }
 
-/** send fastd pid to Android GUI for later signal sending (HUP, TERM etc) */
+/** send fastd pid to Android GUI for later signal sending (USR2, TERM etc) */
 void fastd_android_send_pid(void) {
-	char pid[20];
-	snprintf(pid, sizeof(pid), "%u", (unsigned)getpid());
-	if (write(ctx.android_ctrl_sock_fd, pid, strlen(pid)) != strlen(pid)) {
+	char buf[20];
+	snprintf(buf, sizeof(buf), "%u", (unsigned)getpid());
+	if (write(ctx.android_ctrl_sock_fd, buf, strlen(buf)) != strlen(buf)) {
 		exit_errno("send pid");
+	}
+	if (read(ctx.android_ctrl_sock_fd, buf, sizeof(buf)) == -1) {
+		exit_errno("read ack");
 	}
 }
 
